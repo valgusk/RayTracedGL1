@@ -43,6 +43,8 @@
 	VK_EXTENSION_FUNCTION(vkGetAccelerationStructureDeviceAddressKHR) \
 	VK_EXTENSION_FUNCTION(vkGetAccelerationStructureBuildSizesKHR) \
 	VK_EXTENSION_FUNCTION(vkCmdBuildAccelerationStructuresKHR) \
+	VK_EXTENSION_FUNCTION(vkGetQueueCheckpointDataNV) \
+	VK_EXTENSION_FUNCTION(vkCmdSetCheckpointNV) \
 	VK_EXTENSION_FUNCTION(vkCmdTraceRaysKHR)
 
 #define VK_DEVICE_DEBUG_UTILS_FUNCTION_LIST \
@@ -62,8 +64,35 @@ void InitDeviceExtensionFunctions_DebugUtils(VkDevice device);
 
 #pragma endregion
 
+enum RgDebugCheckpoints
+{
+    RG_CHECKPOINT_BEGIN_FRAME,
+    RG_CHECKPOINT_BUILD_STATIC_BLAS,
+    RG_CHECKPOINT_BUILD_STATIC_BLAS_UPDATE,
+    RG_CHECKPOINT_BUILD_DYNAMIC_BLAS,
+    RG_CHECKPOINT_BUILD_TLAS,
+    RG_CHECKPOINT_TEXTURE_UPLOAD,
+    RG_CHECKPOINT_TEXTURE_COPY_STAGING_TO_IMAGE,
+    RG_CHECKPOINT_TEXTURE_PREPARE_MIPMAPS,
+    RG_CHECKPOINT_TRACE_BIND_DESC_SETS,
+    RG_CHECKPOINT_TRACE_PRIMARY,
+    RG_CHECKPOINT_TRACE_DIRECT,
+    RG_CHECKPOINT_SWAPCHAIN_BLIT,
+    RG_CHECKPOINT_SWAPCHAIN_LAYOUT_CHANGE,
+    RG_CHECKPOINT_RASTERIZER_BEGIN,
+    RG_CHECKPOINT_RASTERIZER_END,
+    RG_CHECKPOINT_BLUE_NOISE_UPLOAD,
+    RG_CHECKPOINT_VERTEX_COLLECTOR_COPY,
+    RG_CHECKPOINT_VERTEX_COLLECTOR_COPY_INDICES,
+    RG_CHECKPOINT_END_FRAME
+};
 
-#define VK_CHECKERROR(x) assert(x == VK_SUCCESS)
+#define SET_CHECKPOINT(cmd, c) svkCmdSetCheckpointNV(cmd, (void*)c)
+
+extern VkQueue _graphicsQueue;
+void _VkCheckError(VkResult r);
+
+#define VK_CHECKERROR(x) _VkCheckError(x)
 
 
 #define SET_DEBUG_NAME(device, obj, type, name) if (svkDebugMarkerSetObjectNameEXT != nullptr) AddDebugName(device, reinterpret_cast<uint64_t>(obj), type, name)

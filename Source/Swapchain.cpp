@@ -175,6 +175,8 @@ void Swapchain::BlitForPresent(VkCommandBuffer cmd, VkImage srcImage, uint32_t s
         swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         1, &region, VK_FILTER_LINEAR);
 
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_SWAPCHAIN_BLIT);
+
     // restore layouts
     Utils::BarrierImage(
         cmd, srcImage,
@@ -321,6 +323,8 @@ void Swapchain::Create(uint32_t newWidth, uint32_t newHeight, bool vsync)
             0, 0,
             VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
     }
+
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_SWAPCHAIN_LAYOUT_CHANGE);
 
     cmdManager->Submit(cmd);
     cmdManager->WaitGraphicsIdle();

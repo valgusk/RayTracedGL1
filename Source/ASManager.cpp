@@ -537,6 +537,8 @@ void ASManager::SubmitStaticGeometry()
     // build AS
     asBuilder->BuildBottomLevel(cmd);
 
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_BUILD_STATIC_BLAS);
+
     // submit and wait
     cmdManager->Submit(cmd, staticCopyFence);
     Utils::WaitAndResetFence(device, staticCopyFence);
@@ -576,6 +578,8 @@ void ASManager::SubmitDynamicGeometry(VkCommandBuffer cmd, uint32_t frameIndex)
 
     // build BLAS
     asBuilder->BuildBottomLevel(cmd);
+
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_BUILD_DYNAMIC_BLAS);
 }
 
 void ASManager::UpdateStaticMovableTransform(uint32_t geomIndex, const RgTransform &transform)
@@ -610,6 +614,8 @@ void ASManager::ResubmitStaticMovable(VkCommandBuffer cmd)
 
     asBuilder->BuildBottomLevel(cmd);
     Utils::ASBuildMemoryBarrier(cmd);
+
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_BUILD_STATIC_BLAS_UPDATE);
 }
 
 bool ASManager::SetupTLASInstance(const AccelerationStructure &as, VkAccelerationStructureInstanceKHR &instance)

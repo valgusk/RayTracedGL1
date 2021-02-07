@@ -136,6 +136,8 @@ void TextureUploader::PrepareMipmaps(VkCommandBuffer cmd, VkImage image, uint32_
             VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
             curMipmap);
     }
+
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_TEXTURE_PREPARE_MIPMAPS);
 }
 
 void TextureUploader::CopyStagingToImage(VkCommandBuffer cmd, VkBuffer staging, VkImage image, const RgExtent2D &size)
@@ -155,6 +157,8 @@ void TextureUploader::CopyStagingToImage(VkCommandBuffer cmd, VkBuffer staging, 
     vkCmdCopyBufferToImage(
         cmd, staging, image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_TEXTURE_COPY_STAGING_TO_IMAGE);
 }
 
 bool TextureUploader::CreateImage(const UploadInfo &info, VkImage *result)

@@ -61,6 +61,7 @@ void PathTracer::Trace(
                             0, setCount, sets,
                             0, nullptr);
 
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_TRACE_BIND_DESC_SETS);
 
     // primary
     rtPipeline->GetEntries(SBT_INDEX_RAYGEN_PRIMARY, raygenEntry, missEntry, hitEntry, callableEntry);
@@ -69,6 +70,8 @@ void PathTracer::Trace(
         cmd,
         &raygenEntry, &missEntry, &hitEntry, &callableEntry,
         width, height, 1);
+
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_TRACE_PRIMARY);
 
     // sync access
     framebuffers->Barrier(cmd, frameIndex, FramebufferImageIndex::FB_IMAGE_ALBEDO);
@@ -88,6 +91,8 @@ void PathTracer::Trace(
         cmd,
         &raygenEntry, &missEntry, &hitEntry, &callableEntry,
         width, height, 1);
+
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_TRACE_DIRECT);
 
     framebuffers->Barrier(cmd, frameIndex, FramebufferImageIndex::FB_IMAGE_LIGHT_DIRECT_DIFFUSE);
     framebuffers->Barrier(cmd, frameIndex, FramebufferImageIndex::FB_IMAGE_LIGHT_DIRECT_SPECULAR);

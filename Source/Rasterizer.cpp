@@ -100,6 +100,8 @@ void Rasterizer::Draw(VkCommandBuffer cmd, uint32_t frameIndex)
 
     vkCmdBeginRenderPass(cmd, &beginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_RASTERIZER_BEGIN);
+
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
     vkCmdBindDescriptorSets(
@@ -134,7 +136,9 @@ void Rasterizer::Draw(VkCommandBuffer cmd, uint32_t frameIndex)
     }
 
     vkCmdEndRenderPass(cmd);
-   
+
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_RASTERIZER_END);
+
     collectors[frameIndex]->Clear();
 }
 

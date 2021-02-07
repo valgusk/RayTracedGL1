@@ -94,6 +94,21 @@ VulkanDevice::VulkanDevice(const RgInstanceCreateInfo *info) :
         device, memAllocator, shaderManager, textureManager, swapchain->GetSurfaceFormat(),
         info->rasterizedMaxVertexCount, info->rasterizedMaxIndexCount);
     swapchain->Subscribe(rasterizer);
+
+    _graphicsQueue = queues->GetGraphics();
+
+    VkQueueFamilyCheckpointPropertiesNV checkpointProperties = {};
+    checkpointProperties.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_NV;
+
+    VkQueueFamilyProperties2 qinfo = {};
+    qinfo.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+    qinfo.pNext = &checkpointProperties;
+
+    uint32_t c = 1;
+    vkGetPhysicalDeviceQueueFamilyProperties2(physDevice->Get(), &c, &qinfo);
+
+    bool topOfPipe = checkpointProperties.checkpointExecutionStageMask & VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    bool bottomOfPipe = checkpointProperties.checkpointExecutionStageMask & VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 }
 
 VulkanDevice::~VulkanDevice()
@@ -196,6 +211,8 @@ void VulkanDevice::Render(VkCommandBuffer cmd, uint32_t renderWidth, uint32_t re
 
 void VulkanDevice::EndFrame(VkCommandBuffer cmd)
 {
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_END_FRAME);
+
     // submit command buffer, but wait until presentation engine has completed using image
     cmdManager->Submit(
         cmd, 
@@ -222,6 +239,9 @@ RgResult VulkanDevice::StartFrame(uint32_t surfaceWidth, uint32_t surfaceHeight,
     }
 
     currentFrameCmd = BeginFrame(surfaceWidth, surfaceHeight, vsync);
+
+    SET_CHECKPOINT(currentFrameCmd, RG_CHECKPOINT_BEGIN_FRAME);
+
     return RG_SUCCESS;
 }
 
@@ -572,6 +592,7 @@ void VulkanDevice::CreateDevice()
     if (enableValidationLayer)
     {
         deviceExtensions.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+        deviceExtensions.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
     }
 
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;

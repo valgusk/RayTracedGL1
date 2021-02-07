@@ -66,6 +66,8 @@ VertexCollector::VertexCollector(
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         "Vertex collector transforms buffer");
 
+    // TODO: geometry infos staging buffer!
+
     // geometry instance info for each geometry in each top level instance
     geomInfosBuffer.Init(
         _allocator,  MAX_TOP_LEVEL_INSTANCE_COUNT * MAX_BOTTOM_LEVEL_GEOMETRIES_COUNT * sizeof(ShGeometryInstance),
@@ -350,6 +352,8 @@ bool VertexCollector::CopyVertexDataFromStaging(VkCommandBuffer cmd, bool isStat
         stagingVertBuffer.GetBuffer(), vertBuffer.GetBuffer(),
         vertCopyInfos.size(), vertCopyInfos.data());
 
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_VERTEX_COLLECTOR_COPY);
+
     return true;
 }
 
@@ -369,6 +373,8 @@ bool VertexCollector::CopyIndexDataFromStaging(VkCommandBuffer cmd)
         cmd,
         stagingIndexBuffer.GetBuffer(), indexBuffer.GetBuffer(),
         1, &indexCopyInfo);
+
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_VERTEX_COLLECTOR_COPY);
 
     return true;
 }

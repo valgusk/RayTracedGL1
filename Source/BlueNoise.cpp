@@ -137,6 +137,8 @@ BlueNoise::BlueNoise(
         cmd, stagingBuffer, blueNoiseImages, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         1, &copyInfo);
 
+    SET_CHECKPOINT(cmd, RG_CHECKPOINT_BLUE_NOISE_UPLOAD);
+
     // to read in shaders
     Utils::BarrierImage(
         cmd, blueNoiseImages,
