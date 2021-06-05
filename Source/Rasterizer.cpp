@@ -195,7 +195,7 @@ void Rasterizer::DrawToFinalImage(VkCommandBuffer cmd, uint32_t frameIndex,
     storageFramebuffers->BarrierMultiple(cmd, frameIndex, fs);
 
 
-    // copy depth buffer
+    // copy depth and color attachments from framebufs
     rasterPass->PrepareForFinal(cmd, frameIndex, storageFramebuffers, werePrimaryTraced);
 
     float defaultViewProj[16];
@@ -341,6 +341,12 @@ void Rasterizer::BindPipelineIfNew(VkCommandBuffer cmd, const RasterizedDataColl
 const std::shared_ptr<RenderCubemap> &Rasterizer::GetRenderCubemap() const
 {
     return renderCubemap;
+}
+
+void Rasterizer::GetRasterizedFinalImage(uint32_t frameIndex, VkImage *pOutImage, VkImageLayout *pOutImageLayout) const
+{
+    *pOutImage = rasterPass->GetRasterAttachmentImage(frameIndex);
+    *pOutImageLayout = rasterPass->GetRasterAttachmentImageLayout();
 }
 
 void Rasterizer::OnSwapchainCreate(const Swapchain *pSwapchain)

@@ -64,16 +64,10 @@ public:
                          uint32_t frameIndex,
                          const FramebufferImageIndex (&framebufferImageIndices)[BARRIER_COUNT]);
 
-    void PresentToSwapchain(
-        VkCommandBuffer cmd, uint32_t frameIndex,
-        const std::shared_ptr<Swapchain> &swapchain,
-        FramebufferImageIndex framebufferImageIndex,
-        uint32_t srcWidth, uint32_t srcHeight,
-        VkImageLayout srcLayout);
-
     VkDescriptorSet GetDescSet(uint32_t frameIndex) const;
     VkDescriptorSetLayout GetDescSetLayout() const;
 
+    VkImage GetImage(FramebufferImageIndex framebufferImageIndex, uint32_t frameIndex) const;
     VkImageView GetImageView(FramebufferImageIndex framebufferImageIndex, uint32_t frameIndex) const;
 
     // Subscribe to framebuffers' size change event.

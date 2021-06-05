@@ -28,6 +28,7 @@
 
 constexpr const char *VERT_SHADER = "VertRasterizer";
 constexpr const char *FRAG_SHADER = "FragRasterizer";
+constexpr VkFormat COLOR_FORMAT = VK_FORMAT_R8G8B8A8_UNORM;
 constexpr VkFormat DEPTH_FORMAT = VK_FORMAT_X8_D24_UNORM_PACK32;
 constexpr const char *DEPTH_FORMAT_NAME = "VK_FORMAT_X8_D24_UNORM_PACK32";
 
@@ -47,9 +48,8 @@ RTGL1::RasterPass::RasterPass(
     rasterHeight(0),
     rasterFramebuffers{},
     rasterSkyFramebuffers{},
-    depthImages{},
-    depthViews{},
-    depthMemory{}
+    colorAttchs{},
+    depthAttchs{}
 {
     VkFormatProperties props = {};
     vkGetPhysicalDeviceFormatProperties(_physDevice, DEPTH_FORMAT, &props);
@@ -59,7 +59,9 @@ RTGL1::RasterPass::RasterPass(
         throw RgException(RG_GRAPHICS_API_ERROR, "Depth format is not supported: "s + DEPTH_FORMAT_NAME);
     }
 
-    CreateRasterRenderPass(ShFramebuffers_Formats[FB_IMAGE_INDEX_FINAL], DEPTH_FORMAT);
+    CreateRasterRenderPass(COLOR_FORMAT,
+                           ShFramebuffers_Formats[FB_IMAGE_INDEX_ALBEDO],
+                           DEPTH_FORMAT);
 
     rasterPipelines = std::make_shared<RasterizerPipelines>(device, _pipelineLayout, rasterRenderPass, _instanceInfo.rasterizedVertexColorGamma);
     rasterPipelines->SetShaders(_shaderManager.get(), VERT_SHADER, FRAG_SHADER);
@@ -84,10 +86,28 @@ void RTGL1::RasterPass::PrepareForFinal(
 {
     assert(rasterWidth > 0 && rasterHeight > 0);
 
+
     // firstly, copy data from storage buffer to depth buffer,
     // and only after getting correct depth buffer, draw the geometry
     // if no primary rays were traced, just clear depth buffer without copying
     depthCopying->Process(cmd, frameIndex, storageFramebuffers, rasterWidth, rasterHeight, !werePrimaryTraced);
+
+
+    // also, copy color attachment data from the FINAL framebuf
+    VkImageBlit region = {};
+
+    region.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    region.srcOffsets[0] = { 0, 0, 0 };
+    region.srcOffsets[1] = { static_cast<int32_t>(rasterWidth), static_cast<int32_t>(rasterHeight), 1 };
+
+    region.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    region.dstOffsets[0] = { 0, 0, 0 };
+    region.dstOffsets[1] = { static_cast<int32_t>(rasterWidth), static_cast<int32_t>(rasterHeight), 1 };
+
+    vkCmdBlitImage(cmd, 
+                   storageFramebuffers->GetImage(FB_IMAGE_INDEX_FINAL, frameIndex), VK_IMAGE_LAYOUT_GENERAL,
+                   colorAttchs.image[frameIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   1, &region, VK_FILTER_NEAREST);
 }
 
 void RTGL1::RasterPass::CreateFramebuffers(uint32_t renderWidth, uint32_t renderHeight,
@@ -95,7 +115,7 @@ void RTGL1::RasterPass::CreateFramebuffers(uint32_t renderWidth, uint32_t render
                                            const std::shared_ptr<MemoryAllocator> &allocator,
                                            const std::shared_ptr<CommandBufferManager> &cmdManager)
 {
-    CreateDepthBuffers(renderWidth, renderHeight, allocator, cmdManager);
+    CreateImages(renderWidth, renderHeight, allocator, cmdManager);
 
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
@@ -111,7 +131,7 @@ void RTGL1::RasterPass::CreateFramebuffers(uint32_t renderWidth, uint32_t render
         VkImageView attchs[] =
         {
             VK_NULL_HANDLE,
-            depthViews[i]
+            depthAttchs.view[i]
         };
 
         fbInfo.attachmentCount = sizeof(attchs) / sizeof(attchs[0]);
@@ -120,7 +140,7 @@ void RTGL1::RasterPass::CreateFramebuffers(uint32_t renderWidth, uint32_t render
         {
             fbInfo.renderPass = rasterRenderPass;
 
-            attchs[0] = storageFramebuffers->GetImageView(FB_IMAGE_INDEX_FINAL, i);
+            attchs[0] = colorAttchs.view[i]; 
 
             VkResult r = vkCreateFramebuffer(device, &fbInfo, nullptr, &rasterFramebuffers[i]);
             VK_CHECKERROR(r);
@@ -140,7 +160,7 @@ void RTGL1::RasterPass::CreateFramebuffers(uint32_t renderWidth, uint32_t render
         }
     }
 
-    depthCopying->CreateFramebuffers(depthViews, renderWidth, renderHeight);
+    depthCopying->CreateFramebuffers(depthAttchs.view, renderWidth, renderHeight);
 
     this->rasterWidth = renderWidth;
     this->rasterHeight = renderHeight;
@@ -150,7 +170,7 @@ void RTGL1::RasterPass::DestroyFramebuffers()
 {
     depthCopying->DestroyFramebuffers();
 
-    DestroyDepthBuffers();
+    DestroyImages();
 
     for (VkFramebuffer &fb : rasterFramebuffers)
     {
@@ -211,6 +231,16 @@ VkFramebuffer RTGL1::RasterPass::GetSkyFramebuffer(uint32_t frameIndex) const
     return rasterSkyFramebuffers[frameIndex];
 }
 
+VkImage RTGL1::RasterPass::GetRasterAttachmentImage(uint32_t frameIndex) const
+{
+    return colorAttchs.image[frameIndex];
+}
+
+VkImageLayout RTGL1::RasterPass::GetRasterAttachmentImageLayout() const
+{
+    return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+}
+
 void RTGL1::RasterPass::OnShaderReload(const ShaderManager *shaderManager)
 {
     rasterPipelines->Clear();
@@ -222,23 +252,24 @@ void RTGL1::RasterPass::OnShaderReload(const ShaderManager *shaderManager)
     depthCopying->OnShaderReload(shaderManager);
 }
 
-void RTGL1::RasterPass::CreateRasterRenderPass(VkFormat finalImageFormat, VkFormat depthImageFormat)
+void RTGL1::RasterPass::CreateRasterRenderPass(VkFormat rasterAttchFormat, VkFormat skyAttchFormat, VkFormat depthAttchFormat)
 {
     const int attchCount = 2;
     VkAttachmentDescription attchs[attchCount] = {};
 
     auto &colorAttch = attchs[0];
-    colorAttch.format = finalImageFormat;
+    colorAttch.format = VK_FORMAT_UNDEFINED;
     colorAttch.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttch.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     colorAttch.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttch.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttch.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttch.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
-    colorAttch.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+    // dst optimal for blitting from final frambebuf
+    colorAttch.initialLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    colorAttch.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
     auto &depthAttch = attchs[1];
-    depthAttch.format = depthImageFormat;
+    depthAttch.format = depthAttchFormat;
     depthAttch.samples = VK_SAMPLE_COUNT_1_BIT;
     // will be overwritten
     depthAttch.loadOp = VK_ATTACHMENT_LOAD_OP_MAX_ENUM;
@@ -287,6 +318,7 @@ void RTGL1::RasterPass::CreateRasterRenderPass(VkFormat finalImageFormat, VkForm
     passInfo.pDependencies = &dependency;
 
     {
+        colorAttch.format = rasterAttchFormat;
         // load depth data from depthCopying
         depthAttch.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 
@@ -297,6 +329,7 @@ void RTGL1::RasterPass::CreateRasterRenderPass(VkFormat finalImageFormat, VkForm
     }
 
     {
+        colorAttch.format = skyAttchFormat;
         depthAttch.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 
         VkResult r = vkCreateRenderPass(device, &passInfo, nullptr, &rasterSkyRenderPass);
@@ -306,118 +339,194 @@ void RTGL1::RasterPass::CreateRasterRenderPass(VkFormat finalImageFormat, VkForm
     }
 }
 
-void RTGL1::RasterPass::CreateDepthBuffers(uint32_t width, uint32_t height,
+void RTGL1::RasterPass::CreateImages(uint32_t width, uint32_t height,
                                            const std::shared_ptr<MemoryAllocator> &allocator, 
                                            const std::shared_ptr<CommandBufferManager> &cmdManager)
 {
+    VkResult r;
+
+    VkCommandBuffer cmd = cmdManager->StartGraphicsCmd();
+
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        assert(depthImages[i] == VK_NULL_HANDLE);
-        assert(depthViews[i] == VK_NULL_HANDLE);
-        assert(depthMemory[i] == VK_NULL_HANDLE);
+        assert(depthAttchs.image[i] == VK_NULL_HANDLE);
+        assert(depthAttchs.view[i] == VK_NULL_HANDLE);
+        assert(depthAttchs.memory[i] == VK_NULL_HANDLE);
 
         VkImageCreateInfo imageInfo = {};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
         imageInfo.flags = 0;
-        imageInfo.format = DEPTH_FORMAT;
         imageInfo.extent = { width, height, 1 };
         imageInfo.mipLevels = 1;
         imageInfo.arrayLayers = 1;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-        VkResult r = vkCreateImage(device, &imageInfo, nullptr, &depthImages[i]);
-        VK_CHECKERROR(r);
-        SET_DEBUG_NAME(device, depthImages[i], VK_OBJECT_TYPE_IMAGE, "Rasterizer raster pass depth image" );
+        {
+            imageInfo.format = DEPTH_FORMAT;
+            imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+            r = vkCreateImage(device, &imageInfo, nullptr, &depthAttchs.image[i]);
+            VK_CHECKERROR(r);
+            SET_DEBUG_NAME(device, depthAttchs.image[i], VK_OBJECT_TYPE_IMAGE, "Rasterizer raster pass depth image");
+        }
+        {
+            imageInfo.format = COLOR_FORMAT;
+            // dst - for copying from final framebuf,
+            // src - for copying to swapchain
+            imageInfo.usage = 
+                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT | 
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+            r = vkCreateImage(device, &imageInfo, nullptr, &colorAttchs.image[i]);
+            VK_CHECKERROR(r);
+            SET_DEBUG_NAME(device, colorAttchs.image[i], VK_OBJECT_TYPE_IMAGE, "Rasterizer raster pass color image");
+        }
 
 
         // allocate dedicated memory
-        VkMemoryRequirements memReqs;
-        vkGetImageMemoryRequirements(device, depthImages[i], &memReqs);
-
-        depthMemory[i] = allocator->AllocDedicated(memReqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        SET_DEBUG_NAME(device, depthMemory[i], VK_OBJECT_TYPE_DEVICE_MEMORY, "Rasterizer raster pass depth memory");
-
-        if (depthMemory[i] == VK_NULL_HANDLE)
         {
-            vkDestroyImage(device, depthImages[i], nullptr);
-            depthImages[i] = VK_NULL_HANDLE;
+            VkMemoryRequirements memReqs;
+            vkGetImageMemoryRequirements(device, depthAttchs.image[i], &memReqs);
 
-            return;
+            depthAttchs.memory[i] = allocator->AllocDedicated(memReqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            SET_DEBUG_NAME(device, depthAttchs.memory[i], VK_OBJECT_TYPE_DEVICE_MEMORY, "Rasterizer raster pass depth memory");
+
+            if (depthAttchs.memory[i] == VK_NULL_HANDLE)
+            {
+                vkDestroyImage(device, depthAttchs.image[i], nullptr);
+                depthAttchs.image[i] = VK_NULL_HANDLE;
+
+                throw RgException(RG_GRAPHICS_API_ERROR, "Can't allocate device memory for raster pass depth attachment");
+            }
+
+            r = vkBindImageMemory(device, depthAttchs.image[i], depthAttchs.memory[i], 0);
+            VK_CHECKERROR(r);
         }
+        {
+            VkMemoryRequirements memReqs;
+            vkGetImageMemoryRequirements(device, colorAttchs.image[i], &memReqs);
 
-        r = vkBindImageMemory(device, depthImages[i], depthMemory[i], 0);
-        VK_CHECKERROR(r);
+            colorAttchs.memory[i] = allocator->AllocDedicated(memReqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            SET_DEBUG_NAME(device, colorAttchs.memory[i], VK_OBJECT_TYPE_DEVICE_MEMORY, "Rasterizer raster pass color memory");
+
+            if (colorAttchs.memory[i] == VK_NULL_HANDLE)
+            {
+                vkDestroyImage(device, colorAttchs.image[i], nullptr);
+                colorAttchs.image[i] = VK_NULL_HANDLE;
+
+                throw RgException(RG_GRAPHICS_API_ERROR, "Can't allocate device memory for raster pass color attachment");
+            }
+
+            r = vkBindImageMemory(device, colorAttchs.image[i], colorAttchs.memory[i], 0);
+            VK_CHECKERROR(r);
+        }
 
 
         // create image view
         VkImageViewCreateInfo viewInfo = {};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = DEPTH_FORMAT;
         viewInfo.subresourceRange = {};
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         viewInfo.subresourceRange.baseMipLevel = 0;
         viewInfo.subresourceRange.levelCount = 1;
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
-        viewInfo.image = depthImages[i];
 
-        r = vkCreateImageView(device, &viewInfo, nullptr, &depthViews[i]);
-        VK_CHECKERROR(r);
-        SET_DEBUG_NAME(device, depthViews[i], VK_OBJECT_TYPE_IMAGE_VIEW, "Rasterizer raster pass depth image view");
+        {
+            viewInfo.format = DEPTH_FORMAT;
+            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            viewInfo.image = depthAttchs.image[i];
+
+            r = vkCreateImageView(device, &viewInfo, nullptr, &depthAttchs.view[i]);
+            VK_CHECKERROR(r);
+            SET_DEBUG_NAME(device, depthAttchs.view[i], VK_OBJECT_TYPE_IMAGE_VIEW, "Rasterizer raster pass depth image view");
+        }
+        {
+            viewInfo.format = COLOR_FORMAT;
+            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            viewInfo.image = colorAttchs.image[i];
+
+            r = vkCreateImageView(device, &viewInfo, nullptr, &colorAttchs.view[i]);
+            VK_CHECKERROR(r);
+            SET_DEBUG_NAME(device, colorAttchs.view[i], VK_OBJECT_TYPE_IMAGE_VIEW, "Rasterizer raster pass color image view");
+        }
 
 
         // make transition from undefined manually,
         // so depthAttch.initialLayout can be specified as DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-        VkCommandBuffer cmd = cmdManager->StartGraphicsCmd();
+        VkImageMemoryBarrier imageBarriers[2] = {};
 
-        VkImageMemoryBarrier imageBarrier = {};
-        imageBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        imageBarrier.image = depthImages[i];
-        imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        imageBarrier.srcAccessMask = 0;
-        imageBarrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-        imageBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageBarrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        imageBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        imageBarrier.subresourceRange.baseMipLevel = 0;
-        imageBarrier.subresourceRange.levelCount = 1;
-        imageBarrier.subresourceRange.baseArrayLayer = 0;
-        imageBarrier.subresourceRange.layerCount = 1;
+        {
+            VkImageMemoryBarrier &br = imageBarriers[0];
+            br.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            br.image = depthAttchs.image[i];
+            br.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            br.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            br.srcAccessMask = 0;
+            br.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+            br.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            br.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            br.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            br.subresourceRange.baseMipLevel = 0;
+            br.subresourceRange.levelCount = 1;
+            br.subresourceRange.baseArrayLayer = 0;
+            br.subresourceRange.layerCount = 1;
+        }
+        {
+            VkImageMemoryBarrier &br = imageBarriers[1];
+            br.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            br.image = colorAttchs.image[i];
+            br.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            br.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            br.srcAccessMask = 0;
+            br.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+            br.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            br.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            br.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            br.subresourceRange.baseMipLevel = 0;
+            br.subresourceRange.levelCount = 1;
+            br.subresourceRange.baseArrayLayer = 0;
+            br.subresourceRange.layerCount = 1;
+        }
 
         vkCmdPipelineBarrier(
             cmd,
             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
             0, nullptr,
             0, nullptr,
-            1, &imageBarrier);
-
-        cmdManager->Submit(cmd);
-        cmdManager->WaitGraphicsIdle();
+            sizeof(imageBarriers) / sizeof(imageBarriers[0]), imageBarriers);
     }
+
+    cmdManager->Submit(cmd);
+    cmdManager->WaitGraphicsIdle();
 }
 
-void RTGL1::RasterPass::DestroyDepthBuffers()
+void RTGL1::RasterPass::DestroyImages()
+{
+    DestroyPassImageDef(device, colorAttchs);
+    DestroyPassImageDef(device, depthAttchs);
+}
+
+void RTGL1::RasterPass::DestroyPassImageDef(VkDevice device, PassImageDef &def)
 {
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        assert((depthImages[i] && depthViews[i] && depthMemory[i]) 
-               || (!depthImages[i] && !depthViews[i] && !depthMemory[i]));
-
-        if (depthImages[i] != VK_NULL_HANDLE)
+        assert(( def.image[i] &&  def.view[i] &&  def.memory[i]) ||
+               (!def.image[i] && !def.view[i] && !def.memory[i]));
+        
+        if (def.image[i] != VK_NULL_HANDLE)
         {
-            vkDestroyImage(device, depthImages[i], nullptr);
-            vkDestroyImageView(device, depthViews[i], nullptr);
-            vkFreeMemory(device, depthMemory[i], nullptr);
+            vkDestroyImage(device, def.image[i], nullptr);
+            vkDestroyImageView(device, def.view[i], nullptr);
+            vkFreeMemory(device, def.memory[i], nullptr);
 
-            depthImages[i] = VK_NULL_HANDLE;
-            depthViews[i] = VK_NULL_HANDLE;
-            depthMemory[i] = VK_NULL_HANDLE;
+            def.image[i] = VK_NULL_HANDLE;
+            def.view[i] = VK_NULL_HANDLE;
+            def.memory[i] = VK_NULL_HANDLE;
         }
     }
 }

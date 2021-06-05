@@ -79,6 +79,7 @@ public:
     void OnFramebuffersSizeChange(uint32_t width, uint32_t height) override;
 
     const std::shared_ptr<RenderCubemap> &GetRenderCubemap() const;
+    void GetRasterizedFinalImage(uint32_t frameIndex, VkImage *pOutImage, VkImageLayout *pOutImageLayout) const;
 
 private:
     struct DrawParams

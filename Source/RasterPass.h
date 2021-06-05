@@ -64,14 +64,25 @@ public:
     uint32_t GetRasterHeight() const;
     VkFramebuffer GetFramebuffer(uint32_t frameIndex) const;
     VkFramebuffer GetSkyFramebuffer(uint32_t frameIndex) const;
+    VkImage GetRasterAttachmentImage(uint32_t frameIndex) const;
+    VkImageLayout GetRasterAttachmentImageLayout() const;
 
 private:
-    void CreateRasterRenderPass(VkFormat finalImageFormat, VkFormat depthImageFormat);
+    struct PassImageDef
+    {
+        VkImage         image[MAX_FRAMES_IN_FLIGHT];
+        VkImageView     view[MAX_FRAMES_IN_FLIGHT];
+        VkDeviceMemory  memory[MAX_FRAMES_IN_FLIGHT];
+    };
 
-    void CreateDepthBuffers(uint32_t width, uint32_t height, 
+private:
+    void CreateRasterRenderPass(VkFormat rasterAttchFormat, VkFormat skyAttchFormat, VkFormat depthAttchFormat);
+
+    void CreateImages(uint32_t width, uint32_t height, 
                             const std::shared_ptr<MemoryAllocator> &allocator,
                             const std::shared_ptr<CommandBufferManager> &cmdManager);
-    void DestroyDepthBuffers();
+    void DestroyImages();
+    static void DestroyPassImageDef(VkDevice device, PassImageDef &def);
 
 private:
     VkDevice device;
@@ -90,9 +101,8 @@ private:
 
     std::shared_ptr<DepthCopying> depthCopying;
 
-    VkImage depthImages[MAX_FRAMES_IN_FLIGHT];
-    VkImageView depthViews[MAX_FRAMES_IN_FLIGHT];
-    VkDeviceMemory depthMemory[MAX_FRAMES_IN_FLIGHT];
+    PassImageDef colorAttchs;
+    PassImageDef depthAttchs;
 };
 
 }

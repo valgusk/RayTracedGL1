@@ -412,12 +412,22 @@ void VulkanDevice::Render(VkCommandBuffer cmd, const RgDrawFrameInfo &drawInfo)
         rasterizer->DrawToFinalImage(cmd, frameIndex, textureManager,
                                      uniform->GetData()->view, uniform->GetData()->projection,
                                      werePrimaryTraced);
-    }
 
-    // blit result image to present on a surface
-    framebuffers->PresentToSwapchain(
-        cmd, frameIndex, swapchain, FramebufferImageIndex::FB_IMAGE_INDEX_FINAL,
-        renderWidth, renderHeight, VK_IMAGE_LAYOUT_GENERAL);
+        // blit from rasterizer color attachment to swapchain
+        VkImage img; VkImageLayout imgLayout;
+        rasterizer->GetRasterizedFinalImage(frameIndex, &img, &imgLayout);
+
+        swapchain->BlitForPresent(
+            cmd, img,
+            renderWidth, renderHeight, imgLayout);
+    }
+    else
+    {
+        // if rasterization is disabled, blit final framebuf directly to swapchain
+        swapchain->BlitForPresent(
+            cmd, framebuffers->GetImage(FramebufferImageIndex::FB_IMAGE_INDEX_FINAL, frameIndex),
+            renderWidth, renderHeight, VK_IMAGE_LAYOUT_GENERAL);
+    }
 
     if (!drawInfo.disableRasterization)
     {

@@ -178,22 +178,6 @@ void RTGL1::Framebuffers::BarrierOne(VkCommandBuffer cmd, uint32_t frameIndex, F
     BarrierMultiple(cmd, frameIndex, fs);
 }
 
-void Framebuffers::PresentToSwapchain(
-    VkCommandBuffer cmd, uint32_t frameIndex, 
-    const std::shared_ptr<Swapchain> &swapchain,
-    FramebufferImageIndex framebufferImageIndex, 
-    uint32_t srcWidth, uint32_t srcHeight, VkImageLayout srcLayout)
-{
-    CmdLabel label(cmd, "Present to swapchain");
-
-
-    framebufferImageIndex = FrameIndexToFBIndex(framebufferImageIndex, frameIndex);
-
-    swapchain->BlitForPresent(
-        cmd, images[framebufferImageIndex],
-        srcWidth, srcHeight, srcLayout);
-}
-
 VkDescriptorSet Framebuffers::GetDescSet(uint32_t frameIndex) const
 {
     return descSets[frameIndex];
@@ -202,6 +186,12 @@ VkDescriptorSet Framebuffers::GetDescSet(uint32_t frameIndex) const
 VkDescriptorSetLayout Framebuffers::GetDescSetLayout() const
 {
     return descSetLayout;
+}
+
+VkImage RTGL1::Framebuffers::GetImage(FramebufferImageIndex framebufferImageIndex, uint32_t frameIndex) const
+{
+    framebufferImageIndex = FrameIndexToFBIndex(framebufferImageIndex, frameIndex);
+    return images[framebufferImageIndex];
 }
 
 VkImageView Framebuffers::GetImageView(FramebufferImageIndex framebufferImageIndex, uint32_t frameIndex) const

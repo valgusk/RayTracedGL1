@@ -20,6 +20,7 @@
 
 #include "Swapchain.h"
 #include "Utils.h"
+#include "CmdLabel.h"
 
 using namespace RTGL1;
 
@@ -152,6 +153,9 @@ void Swapchain::AcquireImage(VkSemaphore imageAvailableSemaphore)
 void Swapchain::BlitForPresent(VkCommandBuffer cmd, VkImage srcImage, uint32_t srcImageWidth,
                                uint32_t srcImageHeight, VkImageLayout srcImageLayout)
 {
+    CmdLabel label(cmd, "Present to swapchain");
+
+
     VkImageBlit region = {};
 
     region.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
@@ -165,27 +169,36 @@ void Swapchain::BlitForPresent(VkCommandBuffer cmd, VkImage srcImage, uint32_t s
     VkImage swapchainImage = swapchainImages[currentSwapchainIndex];
     VkImageLayout swapchainImageLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
+
     // set layout for blit
-    Utils::BarrierImage(
-        cmd, srcImage,
-        VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-        srcImageLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    if (srcImageLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+    {
+        Utils::BarrierImage(
+            cmd, srcImage,
+            VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+            srcImageLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    }
 
     Utils::BarrierImage(
         cmd, swapchainImage,
         0, VK_ACCESS_TRANSFER_WRITE_BIT,
         swapchainImageLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
+
     vkCmdBlitImage(
         cmd, srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         1, &region, VK_FILTER_LINEAR);
 
+
     // restore layouts
-    Utils::BarrierImage(
-        cmd, srcImage,
-        VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, srcImageLayout);
+    if (srcImageLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+    {
+        Utils::BarrierImage(
+            cmd, srcImage,
+            VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, srcImageLayout);
+    }
 
     Utils::BarrierImage(
         cmd, swapchainImage,
