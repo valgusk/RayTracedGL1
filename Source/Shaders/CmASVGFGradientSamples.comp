@@ -72,8 +72,8 @@ void main()
         const float gradSample = shadingSampleLuminance - prevShadingSampleLuminance;
         const float normFactor = max(shadingSampleLuminance, prevShadingSampleLuminance);
 
-        directAndSpec.x = gradSample;
-        directAndSpec.y = normFactor;
+        directAndSpec[0] = getAntilagAlpha(gradSample, normFactor);
+        directAndSpec[1] = 0;
     }
 
     {
@@ -83,8 +83,8 @@ void main()
         const float gradSample = shadingSampleLuminance - prevShadingSampleLuminanceSpec;
         const float normFactor = max(shadingSampleLuminance, prevShadingSampleLuminanceSpec);
 
-        directAndSpec.z = gradSample;
-        directAndSpec.w = normFactor;
+        directAndSpec[2] = getAntilagAlpha(gradSample, normFactor);
+        directAndSpec[3] = 0;
     }
 
     imageStore(framebufDiffAndSpecPingGradient, gradPix, directAndSpec);

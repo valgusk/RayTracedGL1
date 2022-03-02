@@ -217,6 +217,16 @@ layout(set = DESC_SET_LIGHT_SOURCES, binding = BINDING_SECTOR_TO_LIGHT_LIST_REGI
 {
     uint sectorToLightListRegion_StartEnd_Sph[];
 };
+
+layout(set = DESC_SET_LIGHT_SOURCES, binding = BINDING_PLAIN_LIGHT_LIST_SPH_PREV) readonly buffer PlainLightListSphPrev_BT
+{
+    uint plainLightList_Sph_Prev[];
+};
+
+layout(set = DESC_SET_LIGHT_SOURCES, binding = BINDING_SECTOR_TO_LIGHT_LIST_REGION_SPH_PREV) readonly buffer SectorToLightListRegionSphPrev_BT
+{
+    uint sectorToLightListRegion_StartEnd_Sph_Prev[];
+};
 #endif
 
 

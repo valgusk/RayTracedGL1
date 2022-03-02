@@ -44,7 +44,7 @@ public:
     LightLists &operator=(const LightLists &other) = delete;
     LightLists &operator=(LightLists &&other) noexcept = delete;
 
-    void PrepareForFrame();
+    void PrepareForFrame(VkCommandBuffer cmd);
     void Reset();
 
     void InsertLight(LightArrayIndex lightIndex, SectorArrayIndex lightSectorIndex, 
@@ -55,6 +55,8 @@ public:
 
     VkBuffer GetPlainLightListDeviceLocalBuffer();
     VkBuffer GetSectorToLightListRegionDeviceLocalBuffer();
+    VkBuffer GetPlainLightListDeviceLocalBuffer_Prev();
+    VkBuffer GetSectorToLightListRegionDeviceLocalBuffer_Prev();
 
 private:
     void AddLightToSectorLightList(LightArrayIndex lightIndex, SectorArrayIndex lightSectorIndex);
@@ -72,6 +74,9 @@ private:
 
     std::shared_ptr<AutoBuffer> plainLightList;
     std::shared_ptr<AutoBuffer> sectorToLightListRegion;
+
+    Buffer plainLightList_Prev;
+    Buffer sectorToLightListRegion_Prev;
 
     // used to copy to mapped memory, to reduce interactions with mapped memory
     std::vector<LightArrayIndex::index_t> plainLightList_Raw;

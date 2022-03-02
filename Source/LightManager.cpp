@@ -189,8 +189,8 @@ void RTGL1::LightManager::PrepareForFrame(VkCommandBuffer cmd, uint32_t frameInd
     sphericalUniqueIDToPrevIndex[frameIndex].clear();
     polygonalUniqueIDToPrevIndex[frameIndex].clear();
 
-    lightListsForSpherical->PrepareForFrame();
-    lightListsForPolygonal->PrepareForFrame();
+    lightListsForSpherical->PrepareForFrame(cmd);
+    lightListsForPolygonal->PrepareForFrame(cmd);
 }
 
 void RTGL1::LightManager::Reset()
@@ -414,6 +414,8 @@ constexpr uint32_t BINDINGS[] =
     BINDING_SECTOR_TO_LIGHT_LIST_REGION_POLY,
     BINDING_PLAIN_LIGHT_LIST_SPH,
     BINDING_SECTOR_TO_LIGHT_LIST_REGION_SPH,
+    BINDING_PLAIN_LIGHT_LIST_SPH_PREV,
+    BINDING_SECTOR_TO_LIGHT_LIST_REGION_SPH_PREV,
 };
 
 void RTGL1::LightManager::CreateDescriptors()
@@ -493,6 +495,8 @@ void RTGL1::LightManager::UpdateDescriptors(uint32_t frameIndex)
         lightListsForPolygonal->GetSectorToLightListRegionDeviceLocalBuffer(),
         lightListsForSpherical->GetPlainLightListDeviceLocalBuffer(),
         lightListsForSpherical->GetSectorToLightListRegionDeviceLocalBuffer(),
+        lightListsForSpherical->GetPlainLightListDeviceLocalBuffer_Prev(),
+        lightListsForSpherical->GetSectorToLightListRegionDeviceLocalBuffer_Prev(),
     };
     static_assert(std::size(BINDINGS) == std::size(buffers), "");
 

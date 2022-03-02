@@ -156,8 +156,8 @@ void main()
     {
         const vec4 gradDS = texelFetch(framebufDiffAndSpecPingGradient_Sampler, getCheckerboardPix(pix) / COMPUTE_ASVGF_STRATA_SIZE, 0);
         const vec4 gradI = texelFetch(framebufIndirPingGradient_Sampler, getCheckerboardPix(pix) / COMPUTE_ASVGF_STRATA_SIZE, 0);
-        const float lambda = getAntilagAlpha(gradDS.r, gradDS.g);
-        const float lambdaSpec = getAntilagAlpha(gradDS.b, gradDS.a);
+        const float lambda = gradDS.r;
+        const float lambdaSpec = gradDS.b;
         const float lambdaIndir = clamp(gradI.r, 0.0, 1.0);
         color.rgb = vec3(lambda, lambdaSpec, lambdaIndir);
     }

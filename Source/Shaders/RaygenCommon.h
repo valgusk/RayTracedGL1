@@ -445,10 +445,22 @@ vec3 getDirectionAndLength(const vec3 start, const vec3 end, out float outLength
 float getSphericalLightWeight(
     const vec3 surfPosition, const vec3 surfNormal, float surfRoughness, const vec3 surfSpecularColor,
     const vec3 toViewerDir,
-    uint plainLightListIndex)
+    uint plainLightListIndex,
+    bool isGradientSample)
 {
-    const uint sphLightIndex = plainLightList_Sph[plainLightListIndex];
-    const ShLightSpherical light = lightSourcesSpherical[sphLightIndex];
+    const uint sphLightIndex = isGradientSample ? 
+        plainLightList_Sph_Prev[plainLightListIndex] : 
+        plainLightList_Sph[plainLightListIndex];
+
+    ShLightSpherical light;
+    if (isGradientSample)
+    {
+        light = lightSourcesSpherical_Prev[sphLightIndex];
+    }
+    else
+    {        
+        light = lightSourcesSpherical[sphLightIndex];
+    }
 
     float dist;
     vec3 dirToCenter = getDirectionAndLength(surfPosition, light.position, dist);
@@ -514,8 +526,13 @@ void processSphericalLight(
     // random in [0,1)
     float rnd = getRandomSample(seed, RANDOM_SALT_SPHERICAL_LIGHT_CHOOSE).x * 0.99;
 
-    const uint lightListBegin = sectorToLightListRegion_StartEnd_Sph[surfSectorArrayIndex * 2 + 0];
-    const uint lightListEnd   = sectorToLightListRegion_StartEnd_Sph[surfSectorArrayIndex * 2 + 1];
+    const uint lightListBegin = isGradientSample ? 
+        sectorToLightListRegion_StartEnd_Sph_Prev[surfSectorArrayIndex * 2 + 0]:
+        sectorToLightListRegion_StartEnd_Sph[surfSectorArrayIndex * 2 + 0];
+
+    const uint lightListEnd   = isGradientSample ? 
+        sectorToLightListRegion_StartEnd_Sph_Prev[surfSectorArrayIndex * 2 + 1]:
+        sectorToLightListRegion_StartEnd_Sph[surfSectorArrayIndex * 2 + 1];
 
     const uint S = uint(ceil(float(lightListEnd - lightListBegin) / MAX_SUBSET_LEN));
     const uint subsetStride = S;
@@ -536,7 +553,7 @@ void processSphericalLight(
         }
 
         const float w = getSphericalLightWeight(surfPosition, surfNormal, surfRoughness, surfSpecularColor, toViewerDir, 
-                                                plainLightListIndex_iter);
+                                                plainLightListIndex_iter, isGradientSample);
 
         if (w > 0)
         {
@@ -569,29 +586,17 @@ void processSphericalLight(
     float pdf = selected_mass / (weightsTotal * S);
 
 
-    ShLightSpherical sphLight;
-    uint sphLightIndex = plainLightList_Sph[selected_plainLightListIndex];
+   
+    uint sphLightIndex = isGradientSample ? plainLightList_Sph_Prev[selected_plainLightListIndex] : plainLightList_Sph[selected_plainLightListIndex];
 
-    if (!isGradientSample)
+    ShLightSpherical sphLight;
+    if (isGradientSample)
     {
-        sphLight = lightSourcesSpherical[sphLightIndex];
+        sphLight = lightSourcesSpherical_Prev[sphLightIndex];
     }
     else
     {        
-        // the seed and other input params were replaced by prev frame's data,
-        // so in some degree, lightIndex is the same as it was chosen in prev frame
-        const uint prevFrameSphLightIndex = sphLightIndex;
-
-        // get cur frame match for the chosen light
-        sphLightIndex = lightSourcesSphMatchPrev[prevFrameSphLightIndex];
-
-        // if light disappeared
-        if (sphLightIndex == UINT32_MAX)
-        {
-            return;
-        }
-
-        sphLight = lightSourcesSpherical_Prev[sphLightIndex];
+        sphLight = lightSourcesSpherical[sphLightIndex];
     }
 
     float distToCenter;

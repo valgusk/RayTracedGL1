@@ -49,18 +49,46 @@ RTGL1::LightLists::LightLists(
     plainLightList_Raw.resize(MAX_SECTOR_COUNT * MAX_LIGHT_LIST_SIZE);
 
     plainLightList = std::make_shared<AutoBuffer>(_device, _memoryAllocator);
-    plainLightList->Create(plainLightList_Raw.size() * PLAIN_LIGHT_LIST_SIZEOF_ELEMENT, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "Light list buffer - "s + _pDebugName);
-
+    plainLightList->Create(plainLightList_Raw.size() * PLAIN_LIGHT_LIST_SIZEOF_ELEMENT, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, "Light list buffer - "s + _pDebugName);
+    plainLightList_Prev.Init(_memoryAllocator, plainLightList->GetSize(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     // contains tuples (begin, end) for each sector
     sectorToLightListRegion_Raw.resize(MAX_SECTOR_COUNT * 2);
 
     sectorToLightListRegion = std::make_shared<AutoBuffer>(_device, _memoryAllocator);
-    sectorToLightListRegion->Create(sectorToLightListRegion_Raw.size() * SECTOR_TO_LIGHT_LIST_REGION_SIZEOF_ELEMENT, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "Sector to light list region buffer - "s + _pDebugName);
+    sectorToLightListRegion->Create(sectorToLightListRegion_Raw.size() * SECTOR_TO_LIGHT_LIST_REGION_SIZEOF_ELEMENT, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, "Sector to light list region buffer - "s + _pDebugName);
+    sectorToLightListRegion_Prev.Init(_memoryAllocator, sectorToLightListRegion->GetSize(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 }
 
-void RTGL1::LightLists::PrepareForFrame()
+void RTGL1::LightLists::PrepareForFrame(VkCommandBuffer cmd)
 {
+    {
+        VkBufferCopy info = {};
+        info.srcOffset = 0;
+        info.dstOffset = 0;
+        info.size = plainLightList_Prev.GetSize();
+        assert(plainLightList_Prev.GetSize() == plainLightList->GetSize());
+
+        vkCmdCopyBuffer(
+            cmd,
+            plainLightList->GetDeviceLocal(), plainLightList_Prev.GetBuffer(),
+            1, &info);
+    }
+    {
+        VkBufferCopy info = {};
+        info.srcOffset = 0;
+        info.dstOffset = 0;
+        info.size = sectorToLightListRegion_Prev.GetSize();
+        assert(sectorToLightListRegion_Prev.GetSize() == sectorToLightListRegion->GetSize());
+
+        vkCmdCopyBuffer(
+            cmd,
+            sectorToLightListRegion->GetDeviceLocal(), sectorToLightListRegion_Prev.GetBuffer(),
+            1, &info);
+    }
+
+
+
     // clear the vectors but without deallocating; they can be reused,
     // since the static scene sectors most probably will be the same
     for (auto &v : lightLists)
@@ -191,4 +219,14 @@ VkBuffer RTGL1::LightLists::GetPlainLightListDeviceLocalBuffer()
 VkBuffer RTGL1::LightLists::GetSectorToLightListRegionDeviceLocalBuffer()
 {
     return sectorToLightListRegion->GetDeviceLocal();
+}
+
+VkBuffer RTGL1::LightLists::GetPlainLightListDeviceLocalBuffer_Prev()
+{
+    return plainLightList_Prev.GetBuffer();
+}
+
+VkBuffer RTGL1::LightLists::GetSectorToLightListRegionDeviceLocalBuffer_Prev()
+{
+    return sectorToLightListRegion_Prev.GetBuffer();
 }

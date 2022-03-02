@@ -135,8 +135,8 @@ void main()
 #if GRADIENT_ESTIMATION_ENABLED
     {
         const vec4 gradDiffSpec = texelFetch(framebufDiffAndSpecPingGradient_Sampler, pix / COMPUTE_ASVGF_STRATA_SIZE, 0);
-        antilagAlpha_Diff = getAntilagAlpha(gradDiffSpec[0], gradDiffSpec[1]);
-        antilagAlpha_Spec = getAntilagAlpha(gradDiffSpec[2], gradDiffSpec[3]);
+        antilagAlpha_Diff = gradDiffSpec[0];
+        antilagAlpha_Spec = gradDiffSpec[2];
         antilagAlpha_Indir = texelFetch(framebufIndirPingGradient_Sampler, pix / COMPUTE_ASVGF_STRATA_SIZE, 0).r;
     }
 #else
