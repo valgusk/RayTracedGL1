@@ -1015,6 +1015,7 @@ void VulkanDevice::DrawFrame(const RgDrawFrameInfo *drawInfo)
     previousFrameTime = currentFrameTime;
     currentFrameTime = drawInfo->currentTime;
 
+    // POI: 
     renderResolution.Setup(drawInfo->pRenderResolutionParams,
                            swapchain->GetWidth(), swapchain->GetHeight(), nvDlss);
 
@@ -1670,7 +1671,8 @@ VkSurfaceKHR VulkanDevice::GetSurfaceFromUser(VkInstance instance, const RgInsta
         win32Info.hinstance = info.pWin32SurfaceInfo->hinstance;
         win32Info.hwnd = info.pWin32SurfaceInfo->hwnd;
 
-        r = vkCreateWin32SurfaceKHR(instance, &win32Info, nullptr, &surface);
+        // r = vkCreateWin32SurfaceKHR(instance, &win32Info, nullptr, &surface);
+        r = vkCreateXlibSurfaceKHR(instance, &win32Info, nullptr, &surface);
         VK_CHECKERROR(r);
 
         return surface;

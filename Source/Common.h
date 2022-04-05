@@ -23,6 +23,8 @@
 #include <cassert>
 #include <memory>
 #include <cstring>
+#include <cmath>
+#include <algorithm>
 #include <vulkan/vulkan.h>
 
 namespace RTGL1

@@ -23,6 +23,7 @@
 #include "Generated/ShaderCommonC.h"
 #include "CmdLabel.h"
 #include <cstring>
+#include <string>
 
 using namespace RTGL1;
 
@@ -36,7 +37,10 @@ GlobalUniform::GlobalUniform(VkDevice _device, std::shared_ptr<MemoryAllocator> 
     uniformData = std::make_shared<ShGlobalUniform>();
 
     uniformBuffer = std::make_shared<AutoBuffer>(_device, _allocator);
-    uniformBuffer->Create(sizeof(ShGlobalUniform), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, "Uniform buffer");
+
+    std::string unibuf;
+    unibuf = "Uniform buffer";
+    uniformBuffer->Create(sizeof(ShGlobalUniform), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, unibuf);
 
     CreateDescriptors();
 }

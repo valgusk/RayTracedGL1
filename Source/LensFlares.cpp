@@ -48,7 +48,8 @@ constexpr VkDeviceSize GetIndirectDrawCountOffset()
 {
     return LENS_FLARES_MAX_DRAW_CMD_COUNT * sizeof(RTGL1::ShIndirectDrawCommand);
 }
-constexpr RTGL1::ShIndirectDrawCommand *GetIndirectDrawCommandsArrayStart(void *pCullingInputBuffer)
+
+RTGL1::ShIndirectDrawCommand *GetIndirectDrawCommandsArrayStart(void *pCullingInputBuffer)
 {
     return (RTGL1::ShIndirectDrawCommand *)((uint8_t*)pCullingInputBuffer + GetIndirectDrawCommandsOffset());
 }

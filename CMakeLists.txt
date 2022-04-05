@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 project(RayTracedGL1 CXX C)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CXX_STANDARD_REQUIRED 11)
 
 # Vulkan
 message(STATUS "Adding Vulkan. VulkanSDK: $ENV{VULKAN_SDK}")
@@ -184,7 +184,7 @@ option(RG_WITH_SURFACE_WIN32    "Build with Win32 VkSurfaceKHR support"     OFF)
 option(RG_WITH_SURFACE_METAL    "Build with Metal VkSurfaceKHR support"     OFF)
 option(RG_WITH_SURFACE_WAYLAND  "Build with Wayland VkSurfaceKHR support"   OFF)
 option(RG_WITH_SURFACE_XCB      "Build with Xcb VkSurfaceKHR support"       OFF)
-option(RG_WITH_SURFACE_XLIB     "Build with Xlib VkSurfaceKHR support"      OFF)
+option(RG_WITH_SURFACE_XLIB     "Build with Xlib VkSurfaceKHR support"      ON)
 
 option(RG_WITH_NVIDIA_DLSS      "Build RTGL1 with Nvidia DLSS"              ON)
 

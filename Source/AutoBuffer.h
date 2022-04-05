@@ -22,6 +22,7 @@
 
 #include "Buffer.h"
 #include "MemoryAllocator.h"
+#include <string>
 
 namespace RTGL1
 {

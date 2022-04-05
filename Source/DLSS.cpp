@@ -32,18 +32,27 @@
 
 #include <nvsdk_ngx_helpers_vk.h>
 #include <nvsdk_ngx_helpers.h>
+#include <nvsdk_ngx_vk.h>
 
 #if __linux__
 #include <unistd.h>         
 #include <linux/limits.h>
+#include <iostream>
+#include <cstdio>
+#include <libgen.h> 
 #endif
+
+#define ERROR printf
+#define INFO printf
+#define LOG(a) std::cout << a << "\n"
+#define APP_ID 231313132
 
 static void PrintCallback(const char *message, NVSDK_NGX_Logging_Level loggingLevel, NVSDK_NGX_Feature sourceComponent)
 {
     printf("DLSS (sourceComponent = %d): %s \n", sourceComponent,  message);
 }
 
-// TODO: DLSS: add LOG INFO / ERROR
+// TODO: DLSS: add LOG(INFO / ERRO)R
 
 RTGL1::DLSS::DLSS(
     VkInstance _instance,
@@ -74,8 +83,22 @@ static std::wstring GetFolderPath()
 #elif defined(__linux__)
     wchar_t appPath[PATH_MAX];
     char appPath_c[PATH_MAX];
-    ssize_t count = readlink("/proc/self/exe", appPath, PATH_MAX);
+    ssize_t count = readlink("/proc/self/exe", appPath_c, PATH_MAX);
+    const char *path;
+    if (count != -1) {
+        path = dirname(appPath_c);
+    }
+
     std::mbstowcs(appPath, appPath_c, PATH_MAX);
+
+    std::cout << "\nPEW: linux!\n";
+    std::wcout << appPath; 
+    std::cout << "\n" ;
+    return appPath;
+    // wchar_t appPath[PATH_MAX];
+    // char appPath_c[PATH_MAX];
+    // ssize_t count = readlink("/proc/self/exe", appPath_c, PATH_MAX);
+    // // std::mbstowcs(appPath, appPath_c, PATH_MAX);
 #endif
 
     std::wstring curFolderPath = appPath;
@@ -88,10 +111,19 @@ bool RTGL1::DLSS::TryInit(VkInstance instance, VkDevice device, VkPhysicalDevice
     NVSDK_NGX_Result r;
 
     std::wstring dllPath = GetFolderPath() + (enableDebug ? L"/dev/" : L"/rel/") ;
-    wchar_t *dllPath_c = (wchar_t *)dllPath.c_str();
+
+    char *dllPath_c = new char[PATH_MAX]; //(char *)dllPath.c_str();
+    std::wcstombs(dllPath_c, dllPath.c_str(), PATH_MAX);
 
     NVSDK_NGX_PathListInfo pathsInfo = {};
-    pathsInfo.Path = &dllPath_c;
+
+    wchar_t *wPath; 
+    wPath = (wchar_t *)dllPath.c_str();
+    pathsInfo.Path = &wPath;
+
+    std::cout << dllPath_c;
+    std::cout << "\nDLLS lib path ^ \n";
+
     pathsInfo.Length = 1;
 
     NGSDK_NGX_LoggingInfo debugLogInfo = {};
@@ -116,18 +148,21 @@ bool RTGL1::DLSS::TryInit(VkInstance instance, VkDevice device, VkPhysicalDevice
         throw RgException(RG_WRONG_ARGUMENT, "Provided application GUID is not GUID. Generate and specify correct GUID to use DLSS.");
     }
 
+    // r = NVSDK_NGX_VULKAN_Init(APP_ID, L"DLSSTemp/", instance, physDevice, device);
     r = NVSDK_NGX_VULKAN_Init_with_ProjectID(
         pAppGuid,
         NVSDK_NGX_EngineType::NVSDK_NGX_ENGINE_TYPE_CUSTOM, RG_RTGL_VERSION_API, L"DLSSTemp/", instance, physDevice, device, &commonInfo);
 
     if (NVSDK_NGX_FAILED(r))
-    {
+    {   
+        std::cout << printf("\nPEW: NVSDK_NGX_VULKAN_Init_with_ProjectID failed: %ls\n", GetNGXResultAsString(r));
         return false;
     }
 
     r = NVSDK_NGX_VULKAN_GetCapabilityParameters(&pParams);
     if (NVSDK_NGX_FAILED(r))
     {
+        std::cout << "\nPEW: NVSDK_NGX_VULKAN_GetCapabilityParameters failed\n";
         NVSDK_NGX_VULKAN_Shutdown();
         pParams = nullptr;
         
@@ -141,50 +176,56 @@ bool RTGL1::DLSS::CheckSupport() const
 {
     if (!isInitialized || pParams == nullptr)
     {
+        std::cout << "\nPEW: !isInitialized || pParams == nullptr\n";
         return false;
     }
 
-    int needsUpdatedDriver = 0;
-    unsigned int minDriverVersionMajor = 0;
-    unsigned int minDriverVersionMinor = 0;
+    // Currently, the SDK and this sample are not in sync.  The sample is a bit forward looking,
+    // in this case.  This will likely be resolved very shortly, and therefore, the code below
+    // should be thought of as needed for a smooth user experience.
+    #if defined(NVSDK_NGX_Parameter_SuperSampling_NeedsUpdatedDriver)        \
+        && defined (NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMajor) \
+        && defined (NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMinor)
 
-    NVSDK_NGX_Result r_upd = pParams->Get(NVSDK_NGX_Parameter_SuperSampling_NeedsUpdatedDriver, &needsUpdatedDriver);
-    NVSDK_NGX_Result r_mjr = pParams->Get(NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMajor, &minDriverVersionMajor);
-    NVSDK_NGX_Result r_mnr = pParams->Get(NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMinor, &minDriverVersionMinor);
-
-    if (NVSDK_NGX_SUCCEED(r_upd) && NVSDK_NGX_SUCCEED(r_mjr) && NVSDK_NGX_SUCCEED(r_mnr))
-    {
-        if (needsUpdatedDriver)
+        // If NGX Successfully initialized then it should set those flags in return
+        int needsUpdatedDriver = 0;
+        unsigned int minDriverVersionMajor = 0;
+        unsigned int minDriverVersionMinor = 0;
+        NVSDK_NGX_Result ResultUpdatedDriver         = pParams->Get(NVSDK_NGX_Parameter_SuperSampling_NeedsUpdatedDriver,    &needsUpdatedDriver);
+        NVSDK_NGX_Result ResultMinDriverVersionMajor = pParams->Get(NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMajor, &minDriverVersionMajor);
+        NVSDK_NGX_Result ResultMinDriverVersionMinor = pParams->Get(NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMinor, &minDriverVersionMinor);
+        if (ResultUpdatedDriver == NVSDK_NGX_Result_Success &&
+            ResultMinDriverVersionMajor == NVSDK_NGX_Result_Success &&
+            ResultMinDriverVersionMinor == NVSDK_NGX_Result_Success)
         {
-            // LOG ERROR("NVIDIA DLSS cannot be loaded due to outdated driver.
-            //            Min Driver Version required : minDriverVersionMajor.minDriverVersionMinor");
-            return false;
+            if (needsUpdatedDriver)
+            {
+                LOG(ERROR("NVIDIA DLSS cannot be loaded due to outdated driver. Minimum Driver Version required : %u.%u", minDriverVersionMajor, minDriverVersionMinor));
+
+                // ShutdownNGX();
+                return false;
+            }
+            else
+            {
+                LOG(INFO("NVIDIA DLSS Minimum driver version was reported as : %u.%u", minDriverVersionMajor, minDriverVersionMinor));
+            }
         }
         else
         {
-            // LOG INFO("NIDIA DLSS Minimum driver version was reported as: minDriverVersionMajor.minDriverVersionMinor");
-        }
-    }
-    else
-    {
-        // LOG INFO("NVIDIA DLSS Minimum driver version was not reported.");
-    }
-
-
-    int isDlssSupported = 0;
-    NVSDK_NGX_Result featureInitResult;
-    NVSDK_NGX_Result r;
-    
-    r = pParams->Get(NVSDK_NGX_Parameter_SuperSampling_Available, &isDlssSupported);
-    if (NVSDK_NGX_FAILED(r) || !isDlssSupported)
-    {
-        // more details about what failed (per feature init result)
-        r = NVSDK_NGX_Parameter_GetI(pParams, NVSDK_NGX_Parameter_SuperSampling_FeatureInitResult, (int *)&featureInitResult);
-        if (NVSDK_NGX_SUCCEED(r))
-        {
-            // LOG INFO("NVIDIA DLSS not available on this hardward/platform., FeatureInitResult = 0x%08x, info: %ls\n", featureInitResult, GetNGXResultAsString(featureInitResult));
+            LOG(INFO("NVIDIA DLSS Minimum driver version was not reported."));
         }
 
+    #endif
+
+    int dlssAvailable  = 0;
+    NVSDK_NGX_Result ResultDLSS = pParams->Get(NVSDK_NGX_Parameter_SuperSampling_Available, &dlssAvailable);
+    if (ResultDLSS != NVSDK_NGX_Result_Success || !dlssAvailable)
+    {
+        // More details about what failed (per feature init result)
+        NVSDK_NGX_Result FeatureInitResult = NVSDK_NGX_Result_Fail;
+        NVSDK_NGX_Parameter_GetI(pParams, NVSDK_NGX_Parameter_SuperSampling_FeatureInitResult, (int*)&FeatureInitResult);
+        LOG(ERROR("NVIDIA DLSS not available on this hardward/platform., FeatureInitResult = 0x%08x, info: %ls", FeatureInitResult, GetNGXResultAsString(FeatureInitResult)));
+        // ShutdownNGX();
         return false;
     }
 
@@ -207,7 +248,7 @@ void RTGL1::DLSS::DestroyDlssFeature()
 
     if (NVSDK_NGX_FAILED(r))
     {
-        // LOG ERROR("Failed to NVSDK_NGX_VULKAN_ReleaseFeature, code = 0x%08x, info: %ls", r, GetNGXResultAsString(t));
+        // LOG(ERROR("Failed to NVSDK_NGX_VULKAN_ReleaseFeature, code = 0x%08x, info: %ls", r, GetNGXResultAsString(t)));
     }
 }
 
@@ -318,7 +359,7 @@ bool RTGL1::DLSS::ValidateDlssFeature(VkCommandBuffer cmd, const RenderResolutio
                                                     &pDlssFeature, pParams, &dlssParams);
     if (NVSDK_NGX_FAILED(r))
     {
-        // LOG ERROR("Failed to create DLSS Features = 0x%08x, info: %ls", r, GetNGXResultAsString(r));
+        // LOG(ERROR("Failed to create DLSS Features = 0x%08x, info: %ls", r, GetNGXResultAsString(r)));
      
         pDlssFeature = nullptr;
         return false;
@@ -376,8 +417,10 @@ RTGL1::FramebufferImageIndex RTGL1::DLSS::Apply(VkCommandBuffer cmd, uint32_t fr
     //             offset of the viewport render
     int resetAccumulation = 0;
     NVSDK_NGX_Coordinates sourceOffset = { 0, 0 };
-    NVSDK_NGX_Dimensions  sourceSize = { renderResolution.Width(),         renderResolution.Height()          };
-    NVSDK_NGX_Dimensions  targetSize = { renderResolution.UpscaledWidth(), renderResolution.UpscaledHeight()  };
+
+    // std::cout << printf("\nPEW: DLLS resoultuions: %ux%u -> %ux%u\n", renderResolution.Width(), renderResolution.Height(), renderResolution.UpscaledWidth(), renderResolution.UpscaledHeight());
+    NVSDK_NGX_Dimensions  sourceSize = { renderResolution.Width(), renderResolution.Height() };
+    NVSDK_NGX_Dimensions  targetSize = { renderResolution.UpscaledWidth(), renderResolution.UpscaledHeight() };
 
 
     NVSDK_NGX_Resource_VK unresolvedColorResource   = ToNGXResource(framebuffers, frameIndex, FI::FB_IMAGE_INDEX_FINAL,       sourceSize);
@@ -408,7 +451,7 @@ RTGL1::FramebufferImageIndex RTGL1::DLSS::Apply(VkCommandBuffer cmd, uint32_t fr
 
     if (NVSDK_NGX_FAILED(r))
     {
-       // LOG ERROR("Failed to NVSDK_NGX_VULKAN_EvaluateFeature for DLSS, code = 0x%08x, info: %ls", r, GetNGXResultAsString(r));
+       // LOG(ERROR("Failed to NVSDK_NGX_VULKAN_EvaluateFeature for DLSS, code = 0x%08x, info: %ls", r, GetNGXResultAsString(r)));
     }
 
     return outputImage;
@@ -434,7 +477,7 @@ void RTGL1::DLSS::GetOptimalSettings(uint32_t userWidth, uint32_t userHeight, Rg
                                                        pOutSharpness);
     if (NVSDK_NGX_FAILED(r))
     {
-        // LOG INFO("Querying Optimal Settings failed! code = 0x%08x, info: %ls", r, GetNGXResultAsString(r));
+        // LOG(INFO("Querying Optimal Settings failed! code = 0x%08x, info: %ls", r, GetNGXResultAsString(r)));
     }
 }
 
