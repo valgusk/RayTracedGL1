@@ -258,7 +258,7 @@ if (RG_WITH_NVIDIA_DLSS)
         else()
             target_link_libraries(RayTracedGL1 PRIVATE "$ENV{DLSS_SDK_PATH}/lib/Linux_x86_64/libnvsdk_ngx.a")
             target_link_libraries(RayTracedGL1 PRIVATE ${CMAKE_DL_LIBS})
-            target_link_libraries(RayTracedGL1 PRIVATE libstdc++)
+            target_link_libraries(RayTracedGL1 PRIVATE stdc++)
         endif()
     else()
         message(FATAL_ERROR 
